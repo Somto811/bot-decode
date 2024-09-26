@@ -37,25 +37,25 @@ def percent_encode(data):
 
 def decode_url_data(url):
     try:
-        # Parse URL dan query params
+        # Parse URL and query params
         parsed_url = urlparse(url)
         query_params = parse_qs(parsed_url.query)
         fragment_params = parse_qs(parsed_url.fragment)
 
-        # Ambil dan decode tgWebAppData
+        # Get and decode tgWebAppData
         tg_web_app_data = fragment_params.get('tgWebAppData', [''])[0]
         decoded_data = unquote(tg_web_app_data)
 
-        # Temukan akhir data relevan
+        # Find the end of relevant data
         end_index = decoded_data.find('&tgWebApp')
         if end_index != -1:
             decoded_data = decoded_data[:end_index]
 
-        # Decode dan format data
+        # Decode and format data
         formatted_data = unquote(decoded_data)
         formatted_data = formatted_data.replace('&tgWebApp', ' ')
 
-        # Mengubah data JSON jika perlu
+        # Convert to JSON if possible
         try:
             json_data = json.loads(formatted_data)
             formatted_data = json.dumps(json_data, indent=4)
@@ -65,7 +65,8 @@ def decode_url_data(url):
         # Percent-encode the formatted data
         formatted_data = percent_encode(formatted_data)
 
-        return '```\n' + formatted_data + '\n```'.replace('\n', ' ')
+        # Add query_id prefix
+        return 'query_id=' + formatted_data
     except Exception as e:
         logger.error(f"Terjadi kesalahan saat mendecode URL: {e}")
         return 'Terjadi kesalahan saat memproses URL.'
@@ -74,11 +75,11 @@ async def handle_message(update: Update, context):
     message_text = update.message.text
 
     try:
-        # Periksa jika pesan mengandung URL dengan 'tgWebAppData'
+        # Check if the message contains URL with 'tgWebAppData'
         if 'tgWebAppData=' in message_text:
             formatted_data = decode_url_data(message_text)
         else:
-            # Decode pesan secara keseluruhan
+            # Decode the entire message
             decoded_message = unquote(message_text)
             formatted_data = decoded_message.replace('&tgWebApp', ' ')
             formatted_data = ' '.join(formatted_data.split())
