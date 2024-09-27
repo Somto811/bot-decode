@@ -1,7 +1,7 @@
 import os
 import json
 import logging
-from urllib.parse import parse_qs, urlparse, unquote
+from urllib.parse import parse_qs, urlparse, unquote, quote
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import Application, MessageHandler, filters
@@ -20,6 +20,23 @@ TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 
 if not TOKEN:
     raise ValueError("Token bot tidak diset di variabel lingkungan.")
+
+def encode_string(input_string):
+    # URL encode the string
+    encoded_string = quote(input_string, safe='')
+    
+    # Define the replacement mapping
+    replacements = {
+        '%7B': '{',
+        '%7D': '}',
+        '%22': '"',
+        '%20': ' '
+    }
+    
+    for encoded, char in replacements.items():
+        encoded_string = encoded_string.replace(encoded, f'%{char}')
+    
+    return encoded_string
 
 def decode_url_data(url):
     try:
@@ -48,7 +65,7 @@ def decode_url_data(url):
 
 async def handle_message(update: Update, context):
     message_text = update.message.text
-    logger.info(f"Received message: {message_text}")
+    logger.info(f"Received message: {message_text}")  # Log incoming message
 
     try:
         # Check if the message contains a URL with 'tgWebAppData'
@@ -57,12 +74,9 @@ async def handle_message(update: Update, context):
         else:
             # Decode the entire message
             decoded_message = unquote(message_text)
-            formatted_data = {"message": decoded_message.replace('&tgWebApp', ' ')}
-
-        # Escape reserved characters in the response message
-        formatted_response = json.dumps(formatted_data, indent=4).replace('{', '\\{').replace('}', '\\}')
+            formatted_data = {"message": encode_string(decoded_message.replace('&tgWebApp', ' '))}
         
-        await update.message.reply_text(formatted_response, parse_mode=ParseMode.MARKDOWN_V2)
+        await update.message.reply_text(json.dumps(formatted_data, indent=4), parse_mode=ParseMode.MARKDOWN_V2)
     except Exception as e:
         logger.error(f"Error processing message: {e}")
         await update.message.reply_text(json.dumps({"error": "Error processing message."}))
