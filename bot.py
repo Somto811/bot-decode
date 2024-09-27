@@ -31,12 +31,9 @@ TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 if not TOKEN:
     raise ValueError("Token bot tidak diset di variabel lingkungan.")
 
-def url_encode_special_chars(data):
-    """Encode specific characters in the string."""
-    return (data.replace('{', '%7B')
-                .replace('}', '%7D')
-                .replace('"', '%22')
-                .replace(' ', '%20'))
+def encode_for_url(data):
+    # Encode specific characters for URL encoding
+    return data.replace('{', '%7B').replace('}', '%7D').replace('"', '%22').replace(' ', '%20')
 
 def decode_url_data(url):
     try:
@@ -54,11 +51,8 @@ def decode_url_data(url):
         if end_index != -1:
             decoded_data = decoded_data[:end_index]
         
-        # Encode special characters
-        encoded_data = url_encode_special_chars(decoded_data)
-
         # Decode dan format data
-        formatted_data = unquote(encoded_data)
+        formatted_data = unquote(decoded_data)
         formatted_data = formatted_data.replace('&tgWebApp', ' ')
         
         # Mengubah data JSON jika perlu
@@ -68,6 +62,8 @@ def decode_url_data(url):
         except json.JSONDecodeError:
             pass
         
+        # Encode formatted data for URL
+        formatted_data = encode_for_url(formatted_data)
         formatted_data = ' '.join(formatted_data.split())
         return '```\n' + formatted_data + '\n```'.replace('\n', ' ')
     except Exception as e:
@@ -84,8 +80,7 @@ async def handle_message(update: Update, context):
         else:
             # Decode pesan secara keseluruhan
             decoded_message = unquote(message_text)
-            formatted_data = url_encode_special_chars(decoded_message)
-            formatted_data = formatted_data.replace('&tgWebApp', ' ')
+            formatted_data = encode_for_url(decoded_message.replace('&tgWebApp', ' '))
             formatted_data = ' '.join(formatted_data.split())
             formatted_data = '```\n' + formatted_data + '\n```'.replace('\n', ' ')
         
