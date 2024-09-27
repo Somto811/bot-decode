@@ -1,11 +1,11 @@
 import os
 import json
 import logging
-from urllib.parse import parse_qs, urlparse, unquote, quote
+from urllib.parse import parse_qs, urlparse, unquote
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import Application, MessageHandler, filters
-from colorama import init, Fore
+from colorama import init
 
 # Setup colorama
 init(autoreset=True)
@@ -21,47 +21,31 @@ TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 if not TOKEN:
     raise ValueError("Token bot tidak diset di variabel lingkungan.")
 
-def encode_string(input_string):
-    # URL encode the string
-    encoded_string = quote(input_string, safe='')
-    
-    # Define the replacement mapping
-    replacements = {
-        '%7B': '{',
-        '%7D': '}',
-        '%22': '"',
-        '%20': ' '
-    }
-    
-    for encoded, char in replacements.items():
-        encoded_string = encoded_string.replace(encoded, f'%{char}')
-    
-    return encoded_string
+def escape_markdown(text):
+    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    for char in special_chars:
+        text = text.replace(char, f'\\{char}')
+    return text
 
 def decode_url_data(url):
     try:
         # Parse URL and query params
         parsed_url = urlparse(url)
         fragment_params = parse_qs(parsed_url.fragment)
-        
+
         # Get and decode tgWebAppData
         tg_web_app_data = fragment_params.get('tgWebAppData', [''])[0]
         decoded_data = unquote(tg_web_app_data)
 
-        # Find the end of relevant data
-        end_index = decoded_data.find('&tgWebApp')
-        if end_index != -1:
-            decoded_data = decoded_data[:end_index]
-
         # Attempt to parse JSON data
         json_data = json.loads(decoded_data)
-        return json.dumps(json_data, indent=4)
+        return json_data  # Return the parsed JSON directly
     except json.JSONDecodeError:
         logger.error("JSON decode error: invalid JSON format.")
-        return json.dumps({"error": "Invalid JSON format."})
+        return {"error": "Invalid JSON format."}
     except Exception as e:
         logger.error(f"Error decoding URL: {e}")
-        return json.dumps({"error": "Error processing the URL."})
+        return {"error": "Error processing the URL."}
 
 async def handle_message(update: Update, context):
     message_text = update.message.text
@@ -74,8 +58,9 @@ async def handle_message(update: Update, context):
         else:
             # Decode the entire message
             decoded_message = unquote(message_text)
-            formatted_data = {"message": encode_string(decoded_message.replace('&tgWebApp', ' '))}
+            formatted_data = {"message": escape_markdown(decoded_message.replace('&tgWebApp', ' '))}
         
+        # Ensure formatted_data is a string
         await update.message.reply_text(json.dumps(formatted_data, indent=4), parse_mode=ParseMode.MARKDOWN_V2)
     except Exception as e:
         logger.error(f"Error processing message: {e}")
