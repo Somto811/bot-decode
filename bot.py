@@ -1,11 +1,14 @@
 import os
 import json
 import logging
-from urllib.parse import parse_qs, urlparse, unquote
+import requests
+from base64 import urlsafe_b64decode
+from datetime import datetime
+from urllib.parse import parse_qs, urlparse, unquote, quote
 from telegram import Update
 from telegram.constants import ParseMode
-from telegram.ext import Application, MessageHandler, filters
-from colorama import init
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from colorama import init, Fore, Style
 
 # Setup colorama
 init(autoreset=True)
@@ -15,56 +18,81 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Define color codes
+merah = Fore.LIGHTRED_EX
+hijau = Fore.LIGHTGREEN_EX
+putih = Fore.LIGHTWHITE_EX
+kuning = Fore.LIGHTYELLOW_EX
+line = putih + "~" * 50
+
 # Define the Telegram bot token
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 
 if not TOKEN:
     raise ValueError("Token bot tidak diset di variabel lingkungan.")
 
-def escape_markdown(text):
-    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
-    for char in special_chars:
-        text = text.replace(char, f'\\{char}')
-    return text
+def url_encode_special_chars(data):
+    """Encode specific characters in the string."""
+    return (data.replace('{', '%7B')
+                .replace('}', '%7D')
+                .replace('"', '%22')
+                .replace(' ', '%20'))
 
 def decode_url_data(url):
     try:
-        # Parse URL and query params
+        # Parse URL dan query params
         parsed_url = urlparse(url)
+        query_params = parse_qs(parsed_url.query)
         fragment_params = parse_qs(parsed_url.fragment)
-
-        # Get and decode tgWebAppData
+        
+        # Ambil dan decode tgWebAppData
         tg_web_app_data = fragment_params.get('tgWebAppData', [''])[0]
         decoded_data = unquote(tg_web_app_data)
+        
+        # Temukan akhir data relevan
+        end_index = decoded_data.find('&tgWebApp')
+        if end_index != -1:
+            decoded_data = decoded_data[:end_index]
+        
+        # Encode special characters
+        encoded_data = url_encode_special_chars(decoded_data)
 
-        # Attempt to parse JSON data
-        json_data = json.loads(decoded_data)
-        return json_data  # Return the parsed JSON directly
-    except json.JSONDecodeError:
-        logger.error("JSON decode error: invalid JSON format.")
-        return {"error": "Invalid JSON format."}
+        # Decode dan format data
+        formatted_data = unquote(encoded_data)
+        formatted_data = formatted_data.replace('&tgWebApp', ' ')
+        
+        # Mengubah data JSON jika perlu
+        try:
+            json_data = json.loads(formatted_data)
+            formatted_data = json.dumps(json_data, indent=4)
+        except json.JSONDecodeError:
+            pass
+        
+        formatted_data = ' '.join(formatted_data.split())
+        return '```\n' + formatted_data + '\n```'.replace('\n', ' ')
     except Exception as e:
-        logger.error(f"Error decoding URL: {e}")
-        return {"error": "Error processing the URL."}
+        logger.error(f"Terjadi kesalahan saat mendecode URL: {e}")
+        return 'Terjadi kesalahan saat memproses URL.'
 
 async def handle_message(update: Update, context):
     message_text = update.message.text
-    logger.info(f"Received message: {message_text}")  # Log incoming message
 
     try:
-        # Check if the message contains a URL with 'tgWebAppData'
+        # Periksa jika pesan mengandung URL dengan 'tgWebAppData'
         if 'tgWebAppData=' in message_text:
             formatted_data = decode_url_data(message_text)
         else:
-            # Decode the entire message
+            # Decode pesan secara keseluruhan
             decoded_message = unquote(message_text)
-            formatted_data = {"message": escape_markdown(decoded_message.replace('&tgWebApp', ' '))}
+            formatted_data = url_encode_special_chars(decoded_message)
+            formatted_data = formatted_data.replace('&tgWebApp', ' ')
+            formatted_data = ' '.join(formatted_data.split())
+            formatted_data = '```\n' + formatted_data + '\n```'.replace('\n', ' ')
         
-        # Ensure formatted_data is a string
-        await update.message.reply_text(json.dumps(formatted_data, indent=4), parse_mode=ParseMode.MARKDOWN_V2)
+        await update.message.reply_text(formatted_data, parse_mode=ParseMode.MARKDOWN_V2)
     except Exception as e:
-        logger.error(f"Error processing message: {e}")
-        await update.message.reply_text(json.dumps({"error": "Error processing message."}))
+        logger.error(f"Terjadi kesalahan saat memproses pesan: {e}")
+        await update.message.reply_text('Terjadi kesalahan saat memproses pesan.')
 
 def main():
     application = Application.builder().token(TOKEN).build()
